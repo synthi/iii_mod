@@ -37,13 +37,16 @@ Keep any sibling files a script loads next to it (e.g. `rake` needs `rake_data.l
 Get scripts from **[codeberg.org/tehn/iii-scripts](https://codeberg.org/tehn/iii-scripts)**
 or write your own.
 
+Helper/data files are hidden from the script lists automatically: `lib.lua`, anything
+in `blacklist.txt`, and any filename starting with `pset_`, `data_`, `d_`, or `state_`.
+
 ```
 ~/dust/data/iii_mod/
   arc/          native iii ARC scripts (*.lua)   [demo_spin.lua auto-installed]
   grid/         native iii GRID scripts (*.lua)  [demo_keys.lua auto-installed]
   pdata/        per-script saved state (psets) — managed for you
   state.lua     your selections + MIDI settings
-  blacklist.txt filenames to hide from the lists (lib.lua always hidden)
+  blacklist.txt extra filenames to hide (lib.lua + pset_/data_/d_/state_ auto-hidden)
 ```
 
 ## Use it — `SYSTEM › MODS › iii_mod`
@@ -62,7 +65,17 @@ K3 loads the highlighted script).
 
 **MIDI tab** (per device, so arc and grid can go different places):
 
-- **arc out / grid out** — the norns vport (1–16, by name) each device sends to.
+- **route** — how the two scripts connect:
+  - `split` — each device sends to its own out port (point both at the virtual port for
+    _grid → norns **&** arc → norns_).
+  - `grid>arc` — the grid script's MIDI feeds the **arc** script, and only the arc
+    script reaches its out port (_grid → arc → norns_).
+  - `arc>grid` — the reverse (_arc → grid → norns_).
+
+  Great for chaining, e.g. a grid sequencer driving an arc arpeggiator into one synth.
+  (If the target script isn't running, it falls back to sending to the port.)
+- **arc out / grid out** — the norns vport (1–16, by name) each device sends to. In a
+  chain route, the feeding device's out port is unused (it goes to the other script).
 - **arc in / grid in** — the vport each device receives on (`none` to disable).
 - **clock** — `thru` passes incoming MIDI clock; `norns` generates clock (24 ppqn) for
   both; `off` strips clock (scripts self-time).

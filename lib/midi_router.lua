@@ -13,7 +13,15 @@ local midi_router = {}
 midi_router.out = { arc = 1, grid = 1 }     -- output vport per device (1..16)
 midi_router.in_port = { arc = 0, grid = 0 } -- input vport per device (0 = none)
 midi_router.clock = "thru"                  -- "thru" | "norns" | "off"
+midi_router.route = "split"                 -- "split" | "grid>arc" | "arc>grid"
 midi_router.on_midi_in = nil                -- function(kind, b1, b2, b3), set by mod
+midi_router.to_runtime = nil                -- function(kind, b1, b2, b3) -> bool (chain routing)
+
+-- inter-script routing (the ">" routes): the source device's MIDI is fed into the
+-- OTHER iii script's event_midi instead of a port; only the terminal script reaches
+-- norns. "split" = each device sends to its own out port (feed both to the virtual
+-- port to get "grid -> norns & arc -> norns").
+midi_router.ROUTES = { "split", "grid>arc", "arc>grid" }
 
 local out_conns = {}   -- [vport] = midi handle
 local in_conns = {}    -- [vport] = midi handle
@@ -65,6 +73,14 @@ end
 
 function midi_router.tx(kind, b1, b2, b3)
   if b1 == nil then return end
+  -- chain routing: feed the source device's MIDI into the other script. If the
+  -- target script isn't running, fall through and send to this device's port.
+  local route = midi_router.route
+  if route == "grid>arc" and kind == "grid" then
+    if midi_router.to_runtime and midi_router.to_runtime("arc", b1, b2, b3) then return end
+  elseif route == "arc>grid" and kind == "arc" then
+    if midi_router.to_runtime and midi_router.to_runtime("grid", b1, b2, b3) then return end
+  end
   local vp = midi_router.out[kind]
   local data
   if b3 ~= nil then data = { b1, b2, b3 }
@@ -162,6 +178,7 @@ function midi_router.get_state()
     out = { arc = midi_router.out.arc, grid = midi_router.out.grid },
     in_port = { arc = midi_router.in_port.arc, grid = midi_router.in_port.grid },
     clock = midi_router.clock,
+    route = midi_router.route,
   }
 end
 
@@ -176,6 +193,7 @@ function midi_router.set_state(t)
     midi_router.in_port.grid = t.in_port.grid or 0
   end
   if t.clock then midi_router.clock = t.clock end
+  if t.route then midi_router.route = t.route end
 end
 
 return midi_router

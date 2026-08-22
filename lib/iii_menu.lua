@@ -85,6 +85,11 @@ function iii_menu.build(ctl)
         end
       end
     else -- midi
+      rows[#rows + 1] = {
+        text = function() return "route: " .. ctl.midi.route() end,
+        e3 = function(d) if d ~= 0 then ctl.midi.set_route(cycle(ctl.midi.routes(), ctl.midi.route(), d)) end end,
+        k3 = function(z) if z == 1 then ctl.midi.set_route(cycle(ctl.midi.routes(), ctl.midi.route(), 1)) end end,
+      }
       rows[#rows + 1] = midi_port_row("arc out", function() return ctl.midi.out("arc") end,
         function(v) ctl.midi.set_out("arc", v) end, 1)
       rows[#rows + 1] = midi_port_row("arc in", function() return ctl.midi.in_port("arc") end,

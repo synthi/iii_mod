@@ -91,8 +91,9 @@ local function ensure_dirs()
     local f = io.open(BLACKLIST_FILE, "w")
     if f then
       f:write("# iii mod blacklist -- one filename per line; these won't be selectable.\n")
-      f:write("# lib.lua is always excluded automatically.\n")
-      f:write("# Add sibling/data files that aren't standalone scripts here, e.g. rake_data.lua\n")
+      f:write("# Always excluded automatically: lib.lua, and files starting with\n")
+      f:write("# pset_  data_  d_  state_  (helper/data files).\n")
+      f:write("# Add other non-standalone files here, e.g. rake_data.lua\n")
       f:write("rake_data.lua\n")
       f:close()
     end
@@ -134,12 +135,23 @@ local function load_blacklist()
   end
 end
 
+-- filename prefixes that mark helper/data files, not standalone scripts
+-- (matches the real iii "many roads" launcher)
+local IGNORE_PREFIXES = { "pset_", "data_", "d_", "state_" }
+
+local function ignored_prefix(fn)
+  for _, p in ipairs(IGNORE_PREFIXES) do
+    if fn:sub(1, #p) == p then return true end
+  end
+  return false
+end
+
 local function list_scripts(kind)
   local out = {}
   local ok, files = pcall(function() return util.scandir(DIRS[kind]) end)
   if ok and files then
     for _, fn in ipairs(files) do
-      if fn:match("%.lua$") and not blacklist[fn] then out[#out + 1] = fn end
+      if fn:match("%.lua$") and not blacklist[fn] and not ignored_prefix(fn) then out[#out + 1] = fn end
     end
     table.sort(out)
   end
@@ -301,6 +313,13 @@ local function wire_callbacks()
     local rt = runtimes[kind]
     if rt and rt.on then rt:dispatch_midi(b1, b2, b3) end
   end
+  -- chain routing: feed one script's output into the other's event_midi.
+  -- returns false (so tx falls back to the port) unless the target actually receives.
+  midi_router.to_runtime = function(kind, b1, b2, b3)
+    local rt = runtimes[kind]
+    if rt and rt.on then return rt:dispatch_midi(b1, b2, b3) end
+    return false
+  end
 end
 
 -- ---------------------------------------------------------------------------
@@ -359,6 +378,9 @@ function ctl.midi.in_port(kind) return midi_router.in_port[kind] end
 function ctl.midi.set_in(kind, vp) midi_router.in_port[kind] = vp; midi_router.rebind(); save_state(); sync_params() end
 function ctl.midi.clock() return midi_router.clock end
 function ctl.midi.set_clock(m) midi_router.clock = m; midi_router.rebind(); save_state(); sync_params() end
+function ctl.midi.route() return midi_router.route end
+function ctl.midi.set_route(r) midi_router.route = r; save_state(); sync_params(); menu_redraw() end
+function ctl.midi.routes() return midi_router.ROUTES end
 function ctl.midi.vport_name(i) return midi_router.vport_name(i) end
 
 -- ---------------------------------------------------------------------------
@@ -369,7 +391,7 @@ function ctl.midi.vport_name(i) return midi_router.vport_name(i) end
 local OFF_ON = { "off", "on" }
 local CLOCK_OPTS = { "thru", "norns", "off" }
 local TAKEOVER_OPTS = { "auto", "forced" }
-local GROUP_N = 13   -- params inside the iii_mod group (2 devices x 5 + clock + arc_btn + arc_key)
+local GROUP_N = 14   -- params inside the iii_mod group (2 devices x 5 + route + clock + arc_btn + arc_key)
 local arc_script_opts, grid_script_opts
 
 local function index_of(list, val, default)
@@ -392,6 +414,7 @@ sync_params = function()
       params:set("iii_" .. k .. "_in", midi_router.in_port[k], true)
       params:set("iii_" .. k .. "_takeover", state.force[k] and 2 or 1, true)
     end
+    params:set("iii_route", index_of(midi_router.ROUTES, midi_router.route, 1), true)
     params:set("iii_clock", index_of(CLOCK_OPTS, midi_router.clock, 1), true)
     params:set("iii_arc_btn", index_of(ARC_BTN_OPTS, state.arc_btn, 1), true)
   end)
@@ -442,6 +465,12 @@ local function add_params()
   end
   add_device_params("arc")
   add_device_params("grid")
+
+  local routes = midi_router.ROUTES
+  params:add_option("iii_route", "midi route", routes, index_of(routes, midi_router.route, 1))
+  params:set_action("iii_route", function(v)
+    if routes[v] ~= midi_router.route then ctl.midi.set_route(routes[v]) end
+  end)
 
   params:add_option("iii_clock", "iii clock", CLOCK_OPTS, index_of(CLOCK_OPTS, midi_router.clock, 1))
   params:set_action("iii_clock", function(v)

@@ -535,9 +535,11 @@ function Runtime:dispatch_arc_key(n, z)
   self:_guard(function() if np == 1 then fn(z) else fn(n, z) end end, "event_arc_key")
 end
 
+-- returns true only if the script actually has an event_midi to receive it
 function Runtime:dispatch_midi(b1, b2, b3)
   local fn = self.env and self.env.event_midi
-  if type(fn) == "function" then self:_guard(function() fn(b1, b2, b3) end, "event_midi") end
+  if type(fn) == "function" then self:_guard(function() fn(b1, b2, b3) end, "event_midi"); return true end
+  return false
 end
 
 -- raw arc encoder in from norns; apply arc_res divisor then dispatch
